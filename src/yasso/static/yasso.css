@@ -1,0 +1,8 @@
+
+.alert {
+    background-color: #ffc;
+    border: 1px solid red;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 10px 0;
+}

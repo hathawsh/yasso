@@ -6,6 +6,7 @@ eggs
 include
 lib
 local
+parts
 var/Data.fs*
 bin/activate*
 bin/bfg2pyramid
@@ -22,3 +23,4 @@ bin/ptweens
 bin/pviews
 bin/py
 bin/python
+bin/yassoctl

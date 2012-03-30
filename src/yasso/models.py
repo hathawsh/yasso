@@ -5,41 +5,66 @@ from BTrees.OOBTree import OOTreeSet  # @UnresolvedImport
 from persistent import Persistent
 from persistent.mapping import PersistentMapping
 from pyramid.security import Allow
-from pyramid.security import DENY_ALL
 from pyramid.security import Authenticated
+from pyramid.security import DENY_ALL
+from pyramid.traversal import find_interface
 
 
 class User(Persistent):
+    """A user that can sign in to the SSO server"""
 
     __acl__ = (
-        (Allow, 'admin', 'edit'),
+        (Allow, 'group.ssoadmin', 'edit'),
         DENY_ALL,
     )
 
-    def __init__(self, parent, userid):
+    def __init__(self, parent, userid, title, groups=(), pwhash=None):
         assert isinstance(userid, basestring)
         self.__parent__ = parent
         self.userid = userid
-        self.properties = PersistentMapping()
+        self.title = title
+        self.groups = tuple(groups)
+        self.pwhash = pwhash
+        self.logins = ()
         self.appids = OOSet()
 
     @property
     def __name__(self):  # @ReservedAssignment
         return self.userid
 
+    @property
+    def apps(self):
+        """Get the list of apps the user is connected to."""
+        yasso = find_yasso(self)
+        res = []
+        for appid in self.appids:
+            app = yasso.apps.get(appid)
+            if app is not None:
+                res.append(app)
+        res.sort(key=lambda app: (app.title.lower(), app.title, app.appid))
+        return res
+
+    def __repr__(self):
+        return 'userid={0}, title={1}, logins={2}, groups={3}'.format(
+            repr(self.userid), repr(self.title), repr(self.logins),
+            repr(self.groups))
+
 
 class App(Persistent):
+    """An application that can receive user tokens"""
 
     __acl__ = (
-        (Allow, 'admin', 'edit'),
+        (Allow, 'group.ssoadmin', 'edit'),
         DENY_ALL,
     )
 
-    def __init__(self, parent, appid):
+    def __init__(self, parent, appid, title, url, redirect_uri):
         assert isinstance(appid, basestring)
         self.__parent__ = parent
         self.appid = appid
-        self.properties = PersistentMapping()
+        self.title = title
+        self.url = url
+        self.redirect_uri = redirect_uri
         self.userids = OOTreeSet()
 
     @property
@@ -48,6 +73,7 @@ class App(Persistent):
 
 
 class AppUser(Persistent):
+    """An application's properties for a user."""
 
     def __init__(self, appid, userid):
         assert isinstance(userid, basestring)
@@ -62,8 +88,8 @@ class AppUser(Persistent):
 class Tree(OOBTree):
 
     __acl__ = (
-        (Allow, 'admin', 'add'),
-        (Allow, 'admin', 'remove'),
+        (Allow, 'group.ssoadmin', 'add'),
+        (Allow, 'group.ssoadmin', 'remove'),
         DENY_ALL,
     )
 
@@ -88,7 +114,7 @@ class Yasso(Persistent):
 
     __acl__ = (
         (Allow, Authenticated, 'use_oauth'),
-        (Allow, 'admin', 'configure'),
+        (Allow, 'group.ssoadmin', 'configure'),
         DENY_ALL,
     )
 
@@ -97,6 +123,7 @@ class Yasso(Persistent):
         self.apps = AppTree(self, u'apps')     # {appid -> App}
         # app_users contains {(appid, userid) -> AppUser}
         self.app_users = OOBTree()
+        self.logins = OOBTree()  # {login -> userid}
         self.title = u'Yet Another Single Sign-On'
 
     def __getitem__(self, name):
@@ -106,6 +133,36 @@ class Yasso(Persistent):
             return self.apps
         else:
             raise KeyError(name)
+
+    def add_user(self, user):
+        userid = user.userid
+        if not userid:
+            raise ValueError("Userid must not be empty")
+        if userid in self.users:
+            raise KeyError(userid)
+        for login in user.logins:
+            if login in self.logins:
+                raise KeyError(login)
+        self.users[userid] = user
+        for login in user.logins:
+            self.logins[login] = userid
+
+    def change_logins(self, user, new_logins):
+        to_add = set(new_logins).difference(set(user.logins))
+        for login in to_add:
+            if login in self.logins:
+                raise KeyError(login)
+        for login in to_add:
+            self.logins[login] = user.userid
+        to_remove = set(user.logins).difference(set(new_logins))
+        for login in to_remove:
+            if login in self.logins:
+                del self.logins[login]
+        user.logins = tuple(new_logins)
+
+
+def find_yasso(context):
+    return find_interface(context, Yasso)
 
 
 def appmaker(zodb_root):

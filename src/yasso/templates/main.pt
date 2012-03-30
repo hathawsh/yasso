@@ -5,10 +5,14 @@
 <head>
   <title>${title}</title>
   <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
-  <link rel="shortcut icon" href="/static/favicon.ico" />
-  <link rel="stylesheet" href="/static/pylons.css" type="text/css" media="screen" />
+  <link rel="shortcut icon" href="/yasso-static/favicon.ico" />
+  <link rel="stylesheet" href="/yasso-static/pylons.css" type="text/css" media="screen" />
   <link rel="stylesheet" href="http://static.pylonsproject.org/fonts/nobile/stylesheet.css" media="screen" />
   <link rel="stylesheet" href="http://static.pylonsproject.org/fonts/neuton/stylesheet.css" media="screen" />
+  <link rel="stylesheet" href="/deform-static/css/form.css" type="text/css" />
+  <link rel="stylesheet" href="/yasso-static/yasso.css" type="text/css" />
+  <script src="/deform-static/scripts/jquery-1.4.2.min.js"></script>
+  <script src="/deform-static/scripts/deform.js"></script>
   <!--[if lte IE 6]>
   <link rel="stylesheet" href="/static/ie6.css" type="text/css" media="screen" charset="utf-8" />
   <![endif]-->

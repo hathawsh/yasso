@@ -4,14 +4,14 @@ import os
 import sys
 
 requires = [
+    'argh',
+    'deform',
+    'pbkdf2',
     'pyramid',
     'pyramid_zodbconn',
     'ZODB3',
     'transaction',
 ]
-
-if sys.version_info[:2] < (2, 7):
-    requires.append('argparse')
 
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.txt')).read()
@@ -41,5 +41,7 @@ setup(
     entry_points="""
     [paste.app_factory]
     main = yasso.main:main
+    [console_scripts]
+    yassoctl = yasso.scripts.yassoctl:main
     """,
 )
