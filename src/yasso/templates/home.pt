@@ -21,8 +21,11 @@
                         <input type="submit" name="submit" value="Remove Selected Applications" />
                     </form>
                 </div>
+                <div tal:condition="not apps">
+                    Your account is not yet connected with any applications.
+                </div>
 
-                <p><a href="logout">Log Out</a></p>
+                <a href="logout">Log Out</a>
             </div>
 
         </div>

@@ -11,7 +11,11 @@ from pyramid.traversal import find_interface
 
 
 class User(Persistent):
-    """A user that can sign in to the SSO server"""
+    """A user that can sign in to Yasso.
+
+    Note that users may sign in using mechanisms other than login/password,
+    so pwhash and logins may be empty even for legitimate users.
+    """
 
     __acl__ = (
         (Allow, 'group.ssoadmin', 'edit'),

@@ -1,6 +1,7 @@
 .installed.cfg
 .pydevproject
 .pydevproject.bak
+.settings
 develop-eggs
 eggs
 include

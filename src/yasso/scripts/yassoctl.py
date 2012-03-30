@@ -47,7 +47,7 @@ def adduser(args):
         pwhash=pwhash,
     )
     if args.login:
-        user.logins = (args.login,)
+        user.logins = (args.login.lower(),)
     yasso.add_user(user)
     transaction.commit()
 
@@ -65,7 +65,7 @@ def listusers(args):
             users.append(user)
 
     elif args.login:
-        userid = yasso.logins.get(args.login)
+        userid = yasso.logins.get(args.login.lower())
         if userid:
             user = yasso.logins.get(userid)
             if user is not None:
@@ -104,9 +104,18 @@ def changeuser(args):
         user.groups = tuple(args.groups)
 
     if args.logins is not None:
-        yasso.change_logins(args.logins)
+        yasso.change_logins([login.lower() for login in args.logins])
 
     transaction.commit()
+
+
+@arg('title')
+def title(args):
+    app = get_app(args.config_uri)
+    yasso, _closer = get_root(app)
+    yasso.title = args.title
+    transaction.commit()
+
 
 
 def main():
@@ -116,6 +125,7 @@ def main():
         adduser,
         changeuser,
         listusers,
+        title,
     ])
     parser.dispatch()
 
