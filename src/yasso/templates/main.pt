@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xml:lang="en" xmlns:tal="http://xml.zope.org/namespaces/tal"
+    xmlns:metal="http://xml.zope.org/namespaces/metal"
+    metal:define-macro="main">
+<head>
+  <title>${title}</title>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+  <link rel="shortcut icon" href="/static/favicon.ico" />
+  <link rel="stylesheet" href="/static/pylons.css" type="text/css" media="screen" />
+  <link rel="stylesheet" href="http://static.pylonsproject.org/fonts/nobile/stylesheet.css" media="screen" />
+  <link rel="stylesheet" href="http://static.pylonsproject.org/fonts/neuton/stylesheet.css" media="screen" />
+  <!--[if lte IE 6]>
+  <link rel="stylesheet" href="/static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+  <![endif]-->
+<metal:block define-slot="head"></metal:block>
+</head>
+<body>
+  <div id="wrap">
+    <div id="middle">
+      <div class="middle align-center">
+        <h1 class="app-welcome">
+          ${title}
+        </h1>
+      </div>
+    </div>
+    <div id="bottom">
+      <div class="bottom">
+        <metal:block define-slot="content"></metal:block>
+      </div>
+    </div>
+  </div>
+  <div id="footer">
+    <div class="footer"></div>
+  </div>
+</body>
+</html>

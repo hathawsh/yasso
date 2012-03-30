@@ -1,0 +1,11 @@
+<html metal:use-macro="load: main.pt">
+<body>
+    <div metal:fill-slot="content">
+        <div id="left" class="align-right">
+            <h1>Log Out</h1>
+            <p>To log out, you need to close your browser.
+            You may also need to log out of your computer.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<html metal:use-macro="load: main.pt">
+<body>
+    <div metal:fill-slot="content">
+        <div id="left" class="align-right">
+            <h1>Sign In</h1>
+        </div>
+    </div>
+</body>
+</html>
