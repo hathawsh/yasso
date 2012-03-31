@@ -8,6 +8,7 @@ from pyramid.security import Allow
 from pyramid.security import Authenticated
 from pyramid.security import DENY_ALL
 from pyramid.traversal import find_interface
+import datetime
 
 
 class User(Persistent):
@@ -22,10 +23,12 @@ class User(Persistent):
         DENY_ALL,
     )
 
-    def __init__(self, parent, userid, title, groups=(), pwhash=None):
+    def __init__(self, parent, userid, title=None, groups=(), pwhash=None):
         assert isinstance(userid, basestring)
         self.__parent__ = parent
         self.userid = userid
+        if title is None:
+            title = userid
         self.title = title
         self.groups = tuple(groups)
         self.pwhash = pwhash
@@ -55,21 +58,29 @@ class User(Persistent):
 
 
 class App(Persistent):
-    """An application that can receive user tokens"""
+    """An application (aka consumer)"""
 
     __acl__ = (
         (Allow, 'group.ssoadmin', 'edit'),
         DENY_ALL,
     )
 
-    def __init__(self, parent, appid, title, url, redirect_uri):
+    def __init__(self, parent, appid, secret, title, url,
+            redirect_uri_expr=None,
+            default_redirect_uri=None):
         assert isinstance(appid, basestring)
         self.__parent__ = parent
         self.appid = appid
+        self.secret = secret
         self.title = title
         self.url = url
-        self.redirect_uri = redirect_uri
+        self.redirect_uri_expr = redirect_uri_expr
+        self.default_redirect_uri = default_redirect_uri
         self.userids = OOTreeSet()
+        now = datetime.datetime.utcnow()
+        # Codes and tokens for this app are not valid before secret_time.
+        self.created = now
+        self.secret_time = now
 
     @property
     def __name__(self):  # @ReservedAssignment
@@ -84,9 +95,19 @@ class AppUser(Persistent):
         assert isinstance(appid, basestring)
         self.appid = appid
         self.userid = userid
-        self.code_secret = None
-        self.token_secret = None
+        self.codes = PersistentMapping()   # {code: AuthCode}
+        self.tokens = PersistentMapping()  # {token: AuthToken}
         self.properties = PersistentMapping()
+
+
+class AuthCode(object):
+    # Includes: created, redirect_uri.
+    pass
+
+
+class AuthToken(object):
+    # Includes: created.
+    pass
 
 
 class Tree(OOBTree):

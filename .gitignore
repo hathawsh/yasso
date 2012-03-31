@@ -25,3 +25,4 @@ bin/pviews
 bin/py
 bin/python
 bin/yassoctl
+*.egg-info

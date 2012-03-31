@@ -1,0 +1,7 @@
+<html metal:use-macro="load: main.pt">
+<body>
+    <div metal:fill-slot="content">
+        
+    </div>
+</body>
+</html>

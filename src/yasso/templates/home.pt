@@ -1,33 +1,28 @@
-<html metal:use-macro="load: main.pt">
+<html
+    xmlns:tal="http://xml.zope.org/namespaces/tal"
+    xmlns:metal="http://xml.zope.org/namespaces/metal"
+    metal:use-macro="load: main.pt">
 <body>
     <div metal:fill-slot="content">
-        <div tal:condition="user is None">
-            <h1>Sign In</h1>
-            <div class="alert" tal:condition="error">${error}</div>
-            ${structure:form.render()}
-        </div>
-        <div tal:condition="user is not None">
-            <div tal:define="apps user.apps">
-                <h1>Welcome, ${user.title}.</h1>
-                <div tal:condition="apps">
-                    <form id="remove-apps" method="post" action="remove-apps">
-                        Your account is connected with the following applications.
-                        <ul>
-                            <li tal:repeat="app apps">
-                                <input type="checkbox" name="remove" value="${app.appid}" />
-                                <a href="${app.url}">${app.title}</a>
-                            </li>
-                        </ul>
-                        <input type="submit" name="submit" value="Remove Selected Applications" />
-                    </form>
-                </div>
-                <div tal:condition="not apps">
-                    Your account is not yet connected with any applications.
-                </div>
-
-                <a href="logout">Log Out</a>
+        <div tal:define="apps user.apps">
+            <h1>Welcome, ${user.title}.</h1>
+            <div tal:condition="apps">
+                <form id="remove-apps" method="post" action="remove-apps">
+                    Your account is connected with the following applications.
+                    <ul>
+                        <li tal:repeat="app apps">
+                            <input type="checkbox" name="remove" value="${app.appid}" />
+                            <a href="${app.url}">${app.title}</a>
+                        </li>
+                    </ul>
+                    <input type="submit" name="submit" value="Remove Selected Applications" />
+                </form>
+            </div>
+            <div tal:condition="not apps">
+                Your account is not yet connected with any applications.
             </div>
 
+            <a href="logout">Log Out</a>
         </div>
     </div>
 </body>
