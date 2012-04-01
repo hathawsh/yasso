@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Loading&hellip;</title>
+</head>
+<body>
+<noscript>
+<a href="${uri}">Loading&hellip;</a>
+</noscript>
+<script type="text/javascript"><!--
+window.location = "${uri}";
+// --></script>
+</body>
+</html>

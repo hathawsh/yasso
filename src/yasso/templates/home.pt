@@ -4,24 +4,23 @@
     metal:use-macro="load: main.pt">
 <body>
     <div metal:fill-slot="content">
-        <div tal:define="apps user.apps">
+        <div tal:define="clients user.clients">
             <h1>Welcome, ${user.title}.</h1>
-            <div tal:condition="apps">
-                <form id="remove-apps" method="post" action="remove-apps">
-                    Your account is connected with the following applications.
+            <div tal:condition="clients">
+                <form id="remove-clients" method="post" action="remove-clients">
+                    Your account on this system is connected with the following sites.
                     <ul>
-                        <li tal:repeat="app apps">
-                            <input type="checkbox" name="remove" value="${app.appid}" />
-                            <a href="${app.url}">${app.title}</a>
+                        <li tal:repeat="client clients">
+                            <input type="checkbox" name="remove" value="${client.clientid}" />
+                            <a href="${client.url}">${client.title}</a>
                         </li>
                     </ul>
-                    <input type="submit" name="submit" value="Remove Selected Applications" />
+                    <input type="submit" name="submit" value="Remove Selected Sites" />
                 </form>
             </div>
-            <div tal:condition="not apps">
-                Your account is not yet connected with any applications.
+            <div tal:condition="not clients">
+                Your account on this system is not yet connected with any sites.
             </div>
-
             <a href="logout">Log Out</a>
         </div>
     </div>

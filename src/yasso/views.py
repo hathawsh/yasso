@@ -1,9 +1,12 @@
 
+from colander import Invalid
 from deform import Form
 from deform.exception import ValidationFailure
 from deform.widget import HiddenWidget
 from deform.widget import PasswordWidget
+from markupsafe import Markup
 from pbkdf2 import crypt
+from pyramid.encode import urlencode
 from pyramid.httpexceptions import HTTPFound
 from pyramid.renderers import render_to_response
 from pyramid.security import authenticated_userid
@@ -11,19 +14,16 @@ from pyramid.security import forget
 from pyramid.security import remember
 from pyramid.url import resource_url
 from pyramid.view import view_config
+from urlparse import parse_qsl
 from urlparse import urljoin
+from urlparse import urlsplit
+from urlparse import urlunsplit
+from yasso.models import ClientUser
 from yasso.models import User
 from yasso.models import Yasso
 import colander
 import logging
-from colander import Invalid
 import re
-from urlparse import urlsplit
-from yasso.models import AppUser
-from pyramid.encode import urlencode
-from urlparse import urlunsplit
-from urlparse import parse_qsl
-from markupsafe import Markup
 
 log = logging.getLogger(__name__)
 
@@ -179,45 +179,45 @@ class AuthorizeView(object):
         except Invalid, e:
             return {'errors': e.messages()}
 
-        self.client_id = params['client_id']
+        self.clientid = params['client_id']
         self.response_types = params['response_type'].split()
         self.specified_redirect_uri = params['redirect_uri']
         self.scope = params['scope']
         self.state = params['state']
 
         try:
-            app = self.yasso.users.get(self.client_id)
-            if app is None:
-                raise ValueError("Invalid client_id: %s" % self.client_id)
-            self.app = app
+            client = self.yasso.clients.get(self.clientid)
+            if client is None:
+                raise ValueError("Invalid client_id: %s" % self.clientid)
+            self.client = client
 
             redirect_uri = self.specified_redirect_uri
             if not redirect_uri:
-                redirect_uri = app.default_redirect_uri
+                redirect_uri = client.default_redirect_uri
             self.redirect_uri = redirect_uri
             self.check_redirect_uri()
 
-            self.app_user = self.prepare_app_user()
+            self.client_user = self.prepare_client_user()
             return self.finish()
 
         except ValueError, e:
             return {'errors': [e]}
 
-    def prepare_app_user(self):
+    def prepare_client_user(self):
         userid = unicode(authenticated_userid(self.request))
         users = self.yasso.users
         user = users.get(userid)
         if user is None:
             users[userid] = user = User(users, userid)
-        key = (self.app.appid, userid)
-        app_users = self.yasso.app_users
-        app_user = app_users.get(key)
-        if app_user is None:
-            app_users[key] = app_user = AppUser(*key)
-        return app_user
+        key = (self.client.clientid, userid)
+        client_users = self.yasso.client_users
+        client_user = client_users.get(key)
+        if client_user is None:
+            client_users[key] = client_user = ClientUser(*key)
+        return client_user
 
     def finish(self):
-        """Link the current profile to the app and redirect to the app."""
+        """Link the current user to the client and redirect to the client."""
         query_data = {}
         fragment_data = {}
         if 'code' in self.response_types:
@@ -229,9 +229,8 @@ class AuthorizeView(object):
             # in the fragment component.
             fragment_data['access_token'] = self.add_token()
             fragment_data['token_type'] = 'bearer'
-            fragment_data['scope'] = ' '.join(
-                sorted(self.requested_permissions))
-        uri = self.mix_redirect_uri(query_data, fragment_data)
+            fragment_data['scope'] = ''
+        uri = self.expand_redirect_uri(query_data, fragment_data)
         return self.redirect_response(uri)
 
     def add_code(self):
@@ -249,7 +248,7 @@ class AuthorizeView(object):
             else:
                 return
 
-        expr = self.app.redirect_uri_expr
+        expr = self.client.redirect_uri_expr
         if expr:
             if not hasattr(expr, 'match'):
                 expr = re.compile(expr)
@@ -264,8 +263,8 @@ class AuthorizeView(object):
             raise ValueError(
                 "The redirect_uri must not have a fragment identifier.")
 
-    def mix_redirect_uri(self, query_data, fragment_data):
-        """Mix data into a redirect URI and return it."""
+    def expand_redirect_uri(self, query_data, fragment_data):
+        """Expand a redirect URI with data and return the new URI."""
         scheme, netloc, path, query, _old_fragment = urlsplit(
             self.redirect_uri)
         fragment = ''

@@ -9,6 +9,7 @@ from pyramid.security import Authenticated
 from pyramid.security import DENY_ALL
 from pyramid.traversal import find_interface
 import datetime
+import os
 
 
 class User(Persistent):
@@ -33,22 +34,23 @@ class User(Persistent):
         self.groups = tuple(groups)
         self.pwhash = pwhash
         self.logins = ()
-        self.appids = OOSet()
+        self.clientids = OOSet()
 
     @property
     def __name__(self):  # @ReservedAssignment
         return self.userid
 
     @property
-    def apps(self):
-        """Get the list of apps the user is connected to."""
+    def clients(self):
+        """Get the list of clients the user is connected to."""
         yasso = find_yasso(self)
         res = []
-        for appid in self.appids:
-            app = yasso.apps.get(appid)
-            if app is not None:
-                res.append(app)
-        res.sort(key=lambda app: (app.title.lower(), app.title, app.appid))
+        for clientid in self.clientids:
+            client = yasso.clients.get(clientid)
+            if client is not None:
+                res.append(client)
+        res.sort(key=lambda client: (
+            client.title.lower(), client.title, client.clientid))
         return res
 
     def __repr__(self):
@@ -57,20 +59,22 @@ class User(Persistent):
             repr(self.groups))
 
 
-class App(Persistent):
-    """An application (aka consumer)"""
+class Client(Persistent):
+    """A web site that accepts credentials from this provider.
+    """
 
     __acl__ = (
         (Allow, 'group.ssoadmin', 'edit'),
         DENY_ALL,
     )
 
-    def __init__(self, parent, appid, secret, title, url,
+    def __init__(self, parent, clientid, secret, title, url,
             redirect_uri_expr=None,
             default_redirect_uri=None):
-        assert isinstance(appid, basestring)
+        assert isinstance(clientid, basestring)
         self.__parent__ = parent
-        self.appid = appid
+        self.clientid = clientid
+        # The client must know the secret.
         self.secret = secret
         self.title = title
         self.url = url
@@ -78,22 +82,22 @@ class App(Persistent):
         self.default_redirect_uri = default_redirect_uri
         self.userids = OOTreeSet()
         now = datetime.datetime.utcnow()
-        # Codes and tokens for this app are not valid before secret_time.
         self.created = now
-        self.secret_time = now
+        # The client must not know aes_key.
+        self.aes_key = os.urandom(16)
 
     @property
     def __name__(self):  # @ReservedAssignment
-        return self.appid
+        return self.clientid
 
 
-class AppUser(Persistent):
-    """An application's properties for a user."""
+class ClientUser(Persistent):
+    """A client's properties for a user."""
 
-    def __init__(self, appid, userid):
+    def __init__(self, clientid, userid):
         assert isinstance(userid, basestring)
-        assert isinstance(appid, basestring)
-        self.appid = appid
+        assert isinstance(clientid, basestring)
+        self.clientid = clientid
         self.userid = userid
         self.codes = PersistentMapping()   # {code: AuthCode}
         self.tokens = PersistentMapping()  # {token: AuthToken}
@@ -128,7 +132,7 @@ class UserTree(Tree):
     pass
 
 
-class AppTree(Tree):
+class ClientTree(Tree):
     pass
 
 
@@ -144,18 +148,20 @@ class Yasso(Persistent):
     )
 
     def __init__(self):
-        self.users = UserTree(self, u'users')  # {userid -> User}
-        self.apps = AppTree(self, u'apps')     # {appid -> App}
-        # app_users contains {(appid, userid) -> AppUser}
-        self.app_users = OOBTree()
+        # users contains {userid -> User}
+        self.users = UserTree(self, u'users')
+        # clients contains {clientid -> Client}
+        self.clients = ClientTree(self, u'clients')
+        # client_users contains {(appid, userid) -> AppUser}
+        self.client_users = OOBTree()
         self.logins = OOBTree()  # {login -> userid}
         self.title = u'Yet Another Single Sign-On'
 
     def __getitem__(self, name):
         if name == u'users':
             return self.users
-        elif name == u'apps':
-            return self.apps
+        elif name == u'clients':
+            return self.clients
         else:
             raise KeyError(name)
 
@@ -173,6 +179,7 @@ class Yasso(Persistent):
             self.logins[login] = userid
 
     def change_logins(self, user, new_logins):
+        """Change the logins for a user."""
         to_add = set(new_logins).difference(set(user.logins))
         for login in to_add:
             if login in self.logins:
