@@ -53,10 +53,11 @@ class KeyWriter(object):
             if name.startswith('.'):
                 continue
             fn = os.path.join(self.dirpath, name)
-            ctime = os.path.getctime(fn)
-            if now >= ctime + self.max_age:
-                # Too old.
-                os.remove(fn)
+            if os.path.isfile(fn):
+                ctime = os.path.getctime(fn)
+                if now >= ctime + self.max_age:
+                    # Too old.
+                    os.remove(fn)
 
 
 class KeyReader(object):
@@ -65,14 +66,14 @@ class KeyReader(object):
     def __init__(self, dirpath, max_age=3600):
         self.dirpath = dirpath
         self.max_age = max_age
-        self.keys = {}  # bytes(key_id): (create_time, key)
+        self.keys = {}  # bytes(key_id): (create_time, key, filename)
 
     def get_key(self, key_id):
         if not isinstance(key_id, bytes):
             raise TypeError("key_id must be a bytes object")
         now = time.time()
         try:
-            ctime, key = self.keys[key_id]
+            ctime, key, fn = self.keys[key_id]
         except KeyError:
             if (not key_id
                     or key_id.startswith(b'.')
@@ -80,7 +81,7 @@ class KeyReader(object):
                     or b'\\' in key_id):
                 raise
             fn = os.path.join(self.dirpath, key_id.decode('ascii'))
-            if not os.path.exists(fn):
+            if not os.path.isfile(fn):
                 raise
             ctime = os.path.getctime(fn)
             if now >= ctime + self.max_age:
@@ -89,18 +90,24 @@ class KeyReader(object):
             f = open(fn)
             key = f.read()
             f.close()
-            self.keys[key_id] = (ctime, key)
+            self.keys[key_id] = (ctime, key, fn)
         else:
             if now >= ctime + self.max_age:
                 # The key in self.keys is too old.
+                self._prune()
+                raise KeyError(key_id)
+            if not os.path.isfile(fn):
+                # The key has been removed.
                 self._prune()
                 raise KeyError(key_id)
         return key
 
     def _prune(self):
         now = time.time()
-        for key_id, (ctime, _key) in self.keys.items():
+        for key_id, (ctime, _key, fn) in self.keys.items():
             if now >= ctime + self.max_age:
+                del self.keys[key_id]
+            if not os.path.isfile(fn):
                 del self.keys[key_id]
 
 
