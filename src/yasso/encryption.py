@@ -54,8 +54,8 @@ class KeyWriter(object):
                 continue
             fn = os.path.join(self.dirpath, name)
             if os.path.isfile(fn):
-                ctime = os.path.getctime(fn)
-                if now >= ctime + self.max_age:
+                mtime = os.path.getmtime(fn)
+                if now >= mtime + self.max_age:
                     # Too old.
                     os.remove(fn)
 
@@ -73,7 +73,7 @@ class KeyReader(object):
             raise TypeError("key_id must be a bytes object")
         now = time.time()
         try:
-            ctime, key, fn = self.keys[key_id]
+            mtime, key, fn = self.keys[key_id]
         except KeyError:
             if (not key_id
                     or key_id.startswith(b'.')
@@ -83,16 +83,16 @@ class KeyReader(object):
             fn = os.path.join(self.dirpath, key_id.decode('ascii'))
             if not os.path.isfile(fn):
                 raise
-            ctime = os.path.getctime(fn)
-            if now >= ctime + self.max_age:
+            mtime = os.path.getmtime(fn)
+            if now >= mtime + self.max_age:
                 # The file is too old.
                 raise
             f = open(fn)
             key = f.read()
             f.close()
-            self.keys[key_id] = (ctime, key, fn)
+            self.keys[key_id] = (mtime, key, fn)
         else:
-            if now >= ctime + self.max_age:
+            if now >= mtime + self.max_age:
                 # The key in self.keys is too old.
                 self._prune()
                 raise KeyError(key_id)
@@ -104,8 +104,8 @@ class KeyReader(object):
 
     def _prune(self):
         now = time.time()
-        for key_id, (ctime, _key, fn) in self.keys.items():
-            if now >= ctime + self.max_age:
+        for key_id, (mtime, _key, fn) in self.keys.items():
+            if now >= mtime + self.max_age:
                 del self.keys[key_id]
             if not os.path.isfile(fn):
                 del self.keys[key_id]
