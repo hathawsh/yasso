@@ -2,11 +2,11 @@
 from pyramid.interfaces import IAuthenticationPolicy
 from pyramid.security import Authenticated
 from pyramid.security import Everyone
+from yasso.encryption import DecryptionError
 from zope.interface import implements
 import base64
 import logging
 import re
-from yasso.encryption import DecryptionError
 import time
 
 log = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class ClientAuthenticationPolicy(object):
         if userid is None:
             return effective_principals
         effective_principals.append(Authenticated)
-        effective_principals.append('yasso.client')
+        effective_principals.append('oauth.client')
         effective_principals.append(userid)
         return effective_principals
 
@@ -91,7 +91,9 @@ class BearerAuthenticationPolicy(object):
         self.max_age = max_age
 
     def decrypt_token(self, request):
-        """Returns token info if the request has a valid token.
+        """Return token info if the request has a valid token.
+
+        Raise DecryptionError if the token is bad or expired.
         """
         access_token = None
         header = request.headers.get('Authorization')
@@ -124,7 +126,8 @@ class BearerAuthenticationPolicy(object):
         related to the request userid exists."""
         try:
             content = self.decrypt_token(request)
-        except DecryptionError:
+        except DecryptionError, e:
+            log.debug("DecryptionError: %s", e)
             return None
         return content[3]
 
@@ -137,7 +140,8 @@ class BearerAuthenticationPolicy(object):
         return ``None``."""
         try:
             _, _, client_id, userid = self.decrypt_token(request)
-        except DecryptionError:
+        except DecryptionError, e:
+            log.debug("DecryptionError: %s", e)
             return None
 
         root = self.root_factory(request)
@@ -154,7 +158,7 @@ class BearerAuthenticationPolicy(object):
         if userid is None:
             return effective_principals
         effective_principals.append(Authenticated)
-        effective_principals.append('yasso.bearer')
+        effective_principals.append('oauth.bearer')
         effective_principals.append(userid)
         return effective_principals
 

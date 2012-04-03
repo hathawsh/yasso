@@ -1,4 +1,5 @@
 
+from ConfigParser import ConfigParser
 from pyramid.security import Allow
 from pyramid.security import Authenticated
 from pyramid.security import DENY_ALL
@@ -7,25 +8,64 @@ from yasso.encryption import Encryptor
 from yasso.encryption import KeyReader
 from yasso.encryption import KeyWriter
 import hashlib
+import os
 import re
 
 
 class AuthorizationServer(object):
 
     __acl__ = (
-        (Allow, Authenticated, 'use_oauth'),
-        (Allow, 'yasso.client', 'get_token'),
-        (Allow, 'yasso.bearer', 'get_user_info'),
+        (Allow, 'oauth.bearer', 'userinfo'),
         DENY_ALL,
     )
 
     def __init__(self, config_file):
-        self.clients = {}  # client_id: Client
-        key_dir = 'XXX'
-        key_writer = KeyWriter(key_dir)
+        dirname = os.path.dirname(config_file)
+        self.cp = ConfigParser(defaults={
+            'here': dirname,
+            '__file__': config_file,
+        })
+        self.cp.read([config_file])
+
+        key_dir = os.path.abspath(self.cp.get('keys', 'dir'))
+        freshness = int(self.get_option('keys', 'freshness', 300))
+        max_age = int(self.get_option('keys', 'max_age', 3600))
+        key_writer = KeyWriter(key_dir, freshness=freshness, max_age=max_age)
         self.encrypt = Encryptor(key_writer)
-        key_reader = KeyReader(key_dir)
+        key_reader = KeyReader(key_dir, max_age=max_age)
         self.decrypt = Decryptor(key_reader)
+
+        self.clients = {}  # client_id: Client
+        prefix = 'client:'
+        for section in self.cp.sections():
+            if section.startswith(prefix):
+                client_id = self.get_option(section, 'id')
+                if not client_id:
+                    client_id = section[len(prefix):]
+                client = Client(
+                    client_id=client_id,
+                    secret=self.get_option(section, 'secret'),
+                    secret_sha256=self.get_option(section, 'secret_sha256'),
+                    redirect_uri_expr=self.get_option(
+                        section, 'redirect_uri_expr'),
+                    default_redirect_uri = self.get_option(
+                        section, 'default_redirect_uri'),
+                )
+                self.clients[client.client_id] = client
+
+        self.models = {
+            'authorize': AuthorizeEndpoint(self, 'authorize'),
+            'token': TokenEndpoint(self, 'token'),
+        }
+
+    def get_option(self, section, name, default=None):
+        if self.cp.has_option(section, name):
+            return self.cp.get(section, name)
+        else:
+            return default
+
+    def __getitem__(self, name):
+        return self.models[name]
 
 
 class Client(object):
@@ -36,9 +76,11 @@ class Client(object):
             secret_sha256=None,
             redirect_uri_expr=None,
             default_redirect_uri=None):
-        assert isinstance(client_id, basestring)
         self.client_id = client_id
         if secret_sha256 is None:
+            if secret is None:
+                raise ValueError(
+                    "Client %s: Either secret or secret_sha256 is required.")
             secret_sha256 = hashlib.sha256(secret).hexdigest()
         self.secret_sha256 = secret_sha256.lower()
         if redirect_uri_expr and not hasattr(redirect_uri_expr, 'match'):
@@ -49,3 +91,27 @@ class Client(object):
     def check_secret(self, secret):
         h = hashlib.sha256(secret).hexdigest().lower()
         return h == self.secret_sha256
+
+
+class AuthorizeEndpoint(object):
+
+    __acl__ = (
+        (Allow, Authenticated, 'use_oauth'),
+        DENY_ALL,
+    )
+
+    def __init__(self, parent, name):
+        self.__parent__ = parent
+        self.__name__ = name
+
+
+class TokenEndpoint(object):
+
+    __acl__ = (
+        (Allow, 'oauth.client', 'get_token'),
+        DENY_ALL,
+    )
+
+    def __init__(self, parent, name):
+        self.__parent__ = parent
+        self.__name__ = name

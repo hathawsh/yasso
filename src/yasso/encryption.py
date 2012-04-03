@@ -74,7 +74,10 @@ class KeyReader(object):
         try:
             ctime, key = self.keys[key_id]
         except KeyError:
-            if key_id.startswith(b'.') or b'/' in key_id or b'\\' in key_id:
+            if (not key_id
+                    or key_id.startswith(b'.')
+                    or b'/' in key_id
+                    or b'\\' in key_id):
                 raise
             fn = os.path.join(self.dirpath, key_id.decode('ascii'))
             if not os.path.exists(fn):
@@ -147,7 +150,11 @@ class Decryptor(object):
         if not isinstance(s, bytes):
             s = s.encode('ascii')
         pad_chars = (4 - len(s)) % 4
-        return urlsafe_b64decode(s + b'=' * pad_chars)
+        to_decode = s + b'=' * pad_chars
+        try:
+            return urlsafe_b64decode(to_decode)
+        except TypeError, e:
+            raise DecryptionError('{0}'.format(e))
 
     def __call__(self, s):
         data = self.b64decode(s)
@@ -157,8 +164,11 @@ class Decryptor(object):
         if pos < 1:
             raise DecryptionError("key_id missing from input")
         key_id = data[1:pos]
-        # get_key may raise KeyError.
-        key = self.key_reader.get_key(key_id)
+        try:
+            key = self.key_reader.get_key(key_id)
+        except KeyError:
+            raise DecryptionError(
+                "Key not found or expired: %s" % repr(key_id))
 
         hmac_key = key[:32]
         aes_key = key[32:]

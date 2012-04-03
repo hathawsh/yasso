@@ -1,10 +1,16 @@
 <html
     xmlns:tal="http://xml.zope.org/namespaces/tal"
     xmlns:metal="http://xml.zope.org/namespaces/metal"
+    tal:define="title 'Authorization'"
     metal:use-macro="load: main.pt">
 <body>
     <div metal:fill-slot="content">
-
+        <div tal:condition="errors">
+            Authorization ${'errors' if len(errors) &gt; 1 else 'error'}:
+            <ul>
+                <li tal:repeat="error errors">${error}</li>
+            </ul>
+        </div>
     </div>
 </body>
 </html>

@@ -7,6 +7,8 @@ requires = [
     'colander',
     'pycrypto',
     'pyramid',
+    'pyramid_who',
+    'repoze.who>=2.0',
 ]
 
 if sys.version_info[:2] < (2, 7):
@@ -39,8 +41,9 @@ setup(
     install_requires=requires,
     entry_points="""
     [paste.app_factory]
-    main = yasso.main:main
-    [console_scripts]
-    yassoctl = yasso.scripts.yassoctl:main
+    authorize = yasso.main:authorize_app
+    token = yasso.main:token_app
+    resource = yasso.main:resource_app
+    composite = yasso.main:CompositeApp
     """,
 )
