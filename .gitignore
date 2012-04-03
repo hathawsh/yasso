@@ -1,7 +1,11 @@
+*.pyc
+*.egg-info
 .installed.cfg
 .pydevproject
 .pydevproject.bak
 .settings
+.coverage
+.externalToolBuilders
 develop-eggs
 eggs
 include
@@ -12,7 +16,10 @@ var/Data.fs*
 bin/activate*
 bin/bfg2pyramid
 bin/buildout
+bin/coverage
 bin/easy_install*
+bin/nosetests
+bin/nosetests-*
 bin/pcreate
 bin/pip
 bin/pip-*
@@ -25,4 +32,3 @@ bin/pviews
 bin/py
 bin/python
 bin/yassoctl
-*.egg-info
