@@ -23,7 +23,10 @@ def make_root_factory(global_config, settings):
 
 
 def authorize_app(global_config, root_factory=None, **settings):
-    """User-visible app."""
+    """User-visible authorization app.
+
+    This application authenticates the user (but not the client).
+    """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
     config = Configurator(
@@ -46,7 +49,11 @@ def authorize_app(global_config, root_factory=None, **settings):
 
 
 def token_app(global_config, root_factory=None, **settings):
-    """App for clients only. Turns auth codes into access tokens."""
+    """Turn auth codes into access tokens.
+
+    This application authenticates the client (after the user
+    has authenticated).
+    """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
     config = Configurator(
@@ -66,7 +73,11 @@ def token_app(global_config, root_factory=None, **settings):
 
 
 def resource_app(global_config, root_factory=None, **settings):
-    """App for clients that have an access token."""
+    """App for clients that have an access token.
+
+    This application authenticates both the user and the client
+    using a single access token.
+    """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
     config = Configurator(
