@@ -4,14 +4,13 @@ import os
 import sys
 
 requires = [
-    'argh',
-    'deform',
-    'pbkdf2',
+    'colander',
+    'pycrypto',
     'pyramid',
-    'pyramid_zodbconn',
-    'ZODB3',
-    'transaction',
 ]
+
+if sys.version_info[:2] < (2, 7):
+    requires.append('unittest2')
 
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.txt')).read()

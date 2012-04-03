@@ -55,7 +55,7 @@ class TestKeyWriter(unittest.TestCase):
         self.assertNotEqual(key1, key2)
 
     def test_prune(self):
-        obj = self._make_default(timeout=0)
+        obj = self._make_default(max_age=0)
         self.assertEqual(os.listdir(self.dirpath), [])
         key_id, _key = obj.get_fresh_key()
         self.assertEqual(os.listdir(self.dirpath), [key_id.decode('ascii')])
@@ -110,7 +110,7 @@ class TestKeyReader(unittest.TestCase):
             obj.get_key(b'spam')
 
     def test_get_key_when_key_id_is_old(self):
-        obj = self._make_default(timeout=0)
+        obj = self._make_default(max_age=0)
         f = open(os.path.join(self.dirpath, 'mykey'), 'w')
         f.write(b'x' * 64)
         f.close()
@@ -141,7 +141,7 @@ class TestKeyReader(unittest.TestCase):
         f.write(b'x' * 64)
         f.close()
         obj.get_key(b'mykey')
-        obj.timeout = 0
+        obj.max_age = 0
         with self.assertRaises(KeyError):
             obj.get_key(b'mykey')
         self.assertFalse(obj.keys)

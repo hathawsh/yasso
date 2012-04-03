@@ -1,143 +1,23 @@
 
 from colander import Invalid
-from deform import Form
-from deform.exception import ValidationFailure
-from deform.widget import HiddenWidget
-from deform.widget import PasswordWidget
 from markupsafe import Markup
-from pbkdf2 import crypt
 from pyramid.encode import urlencode
 from pyramid.httpexceptions import HTTPFound
+from pyramid.httpexceptions import HTTPUnauthorized
 from pyramid.renderers import render_to_response
 from pyramid.security import authenticated_userid
-from pyramid.security import forget
-from pyramid.security import remember
-from pyramid.url import resource_url
-from pyramid.view import view_config
 from urlparse import parse_qsl
-from urlparse import urljoin
 from urlparse import urlsplit
 from urlparse import urlunsplit
-from yasso.models import ClientUser
-from yasso.models import User
-from yasso.models import Yasso
+from yasso.encryption import DecryptionError
 import colander
-import logging
-import re
-
-log = logging.getLogger(__name__)
-
-
-@view_config(context=Yasso, renderer='templates/home.pt')
-def home(yasso, request):
-    userid = authenticated_userid(request)
-    if not userid:
-        url = resource_url(yasso, request, 'login')
-        return HTTPFound(location=url)
-
-    userid = unicode(userid)
-    user = yasso.users.get(userid)
-    if user is None:
-        # Create a temporary User object, but don't store it.
-        user = User(yasso.users, userid)
-    return {
-        'title': yasso.title,
-        'user': user,
-    }
-
-
-@colander.deferred
-def came_from_default(node, kw):
-    return kw['request'].params.get('came_from')
-
-
-class LoginSchema(colander.MappingSchema):
-    login = colander.SchemaNode(colander.String())
-    password = colander.SchemaNode(
-        colander.String(),
-        widget=PasswordWidget(),
-    )
-    came_from = colander.SchemaNode(
-        colander.String(),
-        default=came_from_default,
-        widget=HiddenWidget(),
-    )
-
-
-@view_config(context=Yasso, renderer='templates/login.pt')
-def login(yasso, request):
-    schema = LoginSchema()
-    form = Form(schema, buttons=('Sign In',), formid='login')
-    error = None
-
-    if request.POST.get('__formid__') == form.formid:
-        # Form submitted.
-        controls = request.POST.items()
-        try:
-            appstruct = form.validate(controls)
-        except ValidationFailure, e:
-            form = e
-        else:
-            login = appstruct['login'].lower()
-            userid = yasso.logins.get(login)
-            if userid:
-                user = yasso.users.get(userid)
-                if user is not None and user.pwhash:
-                    h = crypt(appstruct['password'], user.pwhash)
-                    if h == user.pwhash:
-                        # The password is correct.
-                        headers = remember(request, userid)
-                        base = resource_url(yasso, request)
-                        came_from = appstruct['came_from']
-                        if came_from:
-                            url = urljoin(base, came_from)
-                            if not url.startswith(base):
-                                log.warning("Invalid came_from %r. "
-                                    "(Must start with %r.)", came_from, base)
-                                url = base
-                        return HTTPFound(location=url, headers=headers)
-                    else:
-                        log.warning("Incorrect password. userid=%r, login=%r",
-                            userid, login)
-                else:
-                    if user is None:
-                        log.warning("No user found. userid=%r, login=%r",
-                            userid, login)
-                    else:
-                        log.warning("No password set. userid=%r, login=%r",
-                            userid, login)
-            else:
-                log.warning("No user found for login=%r", login)
-
-            error = u"Incorrect login or password."
-
-    return {
-        'title': yasso.title,
-        'user': None,
-        'form': form,
-        'error': error,
-    }
-
-
-@view_config(context=Yasso, name='logout')
-def logout(yasso, request):
-    headers = [('Cache-Control', 'no-cache')]
-    if authenticated_userid(request):
-        # Log out.
-        if request.params.get('confirm-logout'):
-            return render_to_response('templates/logout-failed.pt', {})
-        headers.extend(forget(request))
-        url = resource_url(yasso, request, request.view_name,
-            query={'confirm-logout': 'true'})
-        return HTTPFound(location=url, headers=headers)
-    url = resource_url(yasso, request)
-    return HTTPFound(location=url, headers=headers)
+import time
 
 
 class AuthorizeParameters(colander.MappingSchema):
     """Parameters for the authorize endpoint.
 
-    See OAuth 2 sections 4.1.1 and 4.2.1.
+    Based on OAuth 2 sections 4.1.1 and 4.2.1.
     """
     client_id = colander.SchemaNode(
         colander.Integer(),
@@ -150,7 +30,7 @@ class AuthorizeParameters(colander.MappingSchema):
     redirect_uri = colander.SchemaNode(
         colander.String(),
         validator=colander.Length(min=0, max=1024),
-        missing=None,
+        missing='',
     )
     scope = colander.SchemaNode(
         colander.String(),
@@ -164,31 +44,33 @@ class AuthorizeParameters(colander.MappingSchema):
     )
 
 
-@view_config(context=Yasso, name='authorize', permission='use_oauth',
-        template='templates/authorize.pt')
+# This view is registered in main.py.
 class AuthorizeView(object):
 
-    def __init__(self, yasso, request):
-        self.yasso = yasso
+    def __init__(self, context, request):
+        self.context = context
         self.request = request
 
     def __call__(self):
+        if authenticated_userid(self.request) is None:
+            return {'errors': ["You are not authenticated."]}
+
         schema = AuthorizeParameters()
         try:
             params = schema.deserialize(self.request.params)
         except Invalid, e:
             return {'errors': e.messages()}
 
-        self.clientid = params['client_id']
+        self.client_id = params['client_id']
         self.response_types = params['response_type'].split()
         self.specified_redirect_uri = params['redirect_uri']
         self.scope = params['scope']
         self.state = params['state']
 
         try:
-            client = self.yasso.clients.get(self.clientid)
+            client = self.context.clients.get(self.client_id)
             if client is None:
-                raise ValueError("Invalid client_id: %s" % self.clientid)
+                raise ValueError("Invalid client_id: %s" % self.client_id)
             self.client = client
 
             redirect_uri = self.specified_redirect_uri
@@ -197,49 +79,40 @@ class AuthorizeView(object):
             self.redirect_uri = redirect_uri
             self.check_redirect_uri()
 
-            self.client_user = self.prepare_client_user()
-            return self.finish()
+            return self.redirect()
 
         except ValueError, e:
             return {'errors': [e]}
 
-    def prepare_client_user(self):
-        userid = unicode(authenticated_userid(self.request))
-        users = self.yasso.users
-        user = users.get(userid)
-        if user is None:
-            users[userid] = user = User(users, userid)
-        key = (self.client.clientid, userid)
-        client_users = self.yasso.client_users
-        client_user = client_users.get(key)
-        if client_user is None:
-            client_users[key] = client_user = ClientUser(*key)
-        return client_user
-
-    def finish(self):
-        """Link the current user to the client and redirect to the client."""
+    def redirect(self):
+        """Prepare an auth code or token, then redirect."""
         query_data = {}
         fragment_data = {}
         if 'code' in self.response_types:
             # Authorization code grant: generate and return a code
             # that can be exchanged by the client for an access token.
-            query_data['code'] = self.add_code()
+            query_data['code'] = self.make_code()
         if 'token' in self.response_types:
             # Implicit grant: generate and return an access token
             # in the fragment component.
-            fragment_data['access_token'] = self.add_token()
+            fragment_data['access_token'] = self.make_token()
             fragment_data['token_type'] = 'bearer'
             fragment_data['scope'] = ''
         uri = self.expand_redirect_uri(query_data, fragment_data)
         return self.redirect_response(uri)
 
-    def add_code(self):
-        # Note: include self.specified_redirect_uri in the code, so that
-        # the token endpoint can check it.
-        raise NotImplementedError()
+    def make_code(self):
+        now = int(time.time())
+        userid = authenticated_userid(self.request)
+        uri = self.specified_redirect_uri
+        params = ['c', now, self.client_id, userid, uri]
+        return self.context.encrypt(params)
 
-    def add_token(self):
-        raise NotImplementedError()
+    def make_token(self):
+        now = int(time.time())
+        userid = authenticated_userid(self.request)
+        params = ['t', now, self.client_id, userid]
+        return self.context.encrypt(params)
 
     def check_redirect_uri(self):
         if not self.redirect_uri:
@@ -249,9 +122,7 @@ class AuthorizeView(object):
                 return
 
         expr = self.client.redirect_uri_expr
-        if expr:
-            if not hasattr(expr, 'match'):
-                expr = re.compile(expr)
+        if expr is not None:
             if expr.match(self.redirect_uri) is None:
                 raise ValueError(
                     "Mismatched redirect_uri: %s" % self.redirect_uri)
@@ -307,3 +178,74 @@ class AuthorizeView(object):
             })
             response.headers.update(headers)
             return response
+
+
+class TokenEndpointError(Exception):
+    def __init__(self, error, description):
+        self.error = error
+        self.description = description
+
+
+# This view is registered in main.py.
+def token_view(context, request):
+    """Convert an OAuth authorization code to an access token."""
+    try:
+        try:
+            grant_type = request.POST['grant_type']
+            code = request.POST['code']
+            redirect_uri = request.POST.get('redirect_uri', '')
+        except KeyError, e:
+            raise TokenEndpointError('invalid_request', 'Required: %s' % e)
+
+        if grant_type != 'authorization_code':
+            raise TokenEndpointError('unsupported_grant_type',
+                "Only the 'authentication_code' grant_type is supported.")
+
+        client = context.clients[authenticated_userid(request)]
+        try:
+            content = context.decrypt(code)
+        except DecryptionError, e:
+            raise TokenEndpointError('invalid_grant', '%s' % e)
+        if content[0] != 'c':
+            raise TokenEndpointError('invalid_grant',
+                "The given code is not an authorization code.")
+        (_, code_created, code_client_id, code_user_id,
+            code_redirect_uri) = content
+
+        if code_client_id != client.client_id:
+            raise TokenEndpointError('invalid_grant', "Mismatched client_id.")
+
+        age = time.time() - code_created
+        max_auth_code_age = int(request.registry.settings.get(
+            'max_auth_code_age', 600))
+        if age >= max_auth_code_age:
+            raise TokenEndpointError('invalid_grant',
+                "The authorization code has expired.")
+
+        if redirect_uri != code_redirect_uri:
+            raise TokenEndpointError('invalid_grant',
+                "Mismatched redirect_uri.")
+
+        now = int(time.time())
+        params = ['t', now, client.client_id, code_user_id]
+        token = context.encrypt(params)
+        return {
+            'access_token': token,
+            'token_type': 'bearer',
+            'scope': '',
+        }
+
+    except TokenEndpointError, e:
+        request.response.status = '400 Bad Request'
+        return {
+            'error': e.error,
+            'error_description': e.description,
+        }
+
+
+# This view is registered in main.py.
+def token_forbidden_view(request):
+    """The client failed to authenticate for the token view."""
+    realm = request.registry.settings.get('realm', request.host)
+    headers = {'WWW-Authenticate': 'Basic realm="{0}"'.format(realm)}
+    return HTTPUnauthorized(headers=headers)
