@@ -45,7 +45,7 @@ class ClientAuthenticationPolicy(object):
 
     def authenticated_userid(self, request):
         client_id, secret = self.get_credentials(request)
-        if client_id is None:
+        if client_id is None or not secret:
             return None
         root = self.root_factory(request)
         client = root.clients.get(client_id)
