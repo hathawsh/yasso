@@ -8,6 +8,7 @@ requires = [
     'pycrypto',
     'pyramid',
     'pyramid_who',
+    'randenc',
     'repoze.who>=2.0',
 ]
 
@@ -21,7 +22,7 @@ CHANGES = open(os.path.join(here, 'CHANGES.txt')).read()
 setup(
     name='yasso',
     version='0.1',
-    description='Yet Another Single Sign-On (OAuth2 Provider)',
+    description='Yet Another Single Sign-On: An OAuth2 Provider',
     long_description=README + '\n\n' +  CHANGES,
     classifiers=[
         "Programming Language :: Python",

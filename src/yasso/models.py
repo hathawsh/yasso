@@ -3,10 +3,7 @@ from ConfigParser import ConfigParser
 from pyramid.security import Allow
 from pyramid.security import Authenticated
 from pyramid.security import DENY_ALL
-from yasso.encryption import Decryptor
-from yasso.encryption import Encryptor
-from yasso.encryption import KeyReader
-from yasso.encryption import KeyWriter
+from randenc import RandomEncryption
 import hashlib
 import os
 import re
@@ -27,13 +24,14 @@ class AuthorizationServer(object):
         })
         self.cp.read([config_file])
 
-        key_dir = os.path.abspath(self.cp.get('keys', 'dir'))
-        freshness = int(self.get_option('keys', 'freshness', 300))
-        max_age = int(self.get_option('keys', 'max_age', 3600))
-        key_writer = KeyWriter(key_dir, freshness=freshness, max_age=max_age)
-        self.encrypt = Encryptor(key_writer)
-        key_reader = KeyReader(key_dir, max_age=max_age)
-        self.decrypt = Decryptor(key_reader)
+        key_dir = os.path.abspath(self.cp.get('randenc', 'dir'))
+        freshness = int(self.get_option('randenc', 'freshness', 300))
+        max_age = int(self.get_option('randenc', 'max_age', 3600))
+        max_future = int(self.get_option('randenc', 'max_future', 300))
+        randenc = RandomEncryption(key_dir,
+            freshness=freshness, max_age=max_age, max_future=max_future)
+        self.encrypt = randenc.encrypt
+        self.decrypt = randenc.decrypt
 
         self.clients = {}  # client_id: Client
         prefix = 'client:'

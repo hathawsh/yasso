@@ -8,10 +8,10 @@ from pyramid.httpexceptions import HTTPUnauthorized
 from pyramid.renderers import render_to_response
 from pyramid.security import authenticated_userid
 from pyramid.traversal import find_interface
+from randenc.enc import DecryptionError
 from urlparse import parse_qsl
 from urlparse import urlsplit
 from urlparse import urlunsplit
-from yasso.encryption import DecryptionError
 from yasso.models import AuthorizationServer
 import colander
 import time

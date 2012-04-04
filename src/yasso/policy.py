@@ -2,7 +2,7 @@
 from pyramid.interfaces import IAuthenticationPolicy
 from pyramid.security import Authenticated
 from pyramid.security import Everyone
-from yasso.encryption import DecryptionError
+from randenc.enc import DecryptionError
 from zope.interface import implements
 import base64
 import logging
