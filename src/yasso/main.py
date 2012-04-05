@@ -2,30 +2,22 @@
 from pyramid.authorization import ACLAuthorizationPolicy
 from pyramid.config import Configurator
 from pyramid_who.whov2 import WhoV2AuthenticationPolicy
-from yasso.authviews import AuthorizeView
-from yasso.authviews import basic_forbidden
-from yasso.authviews import bearer_forbidden
-from yasso.authviews import token_view
+from yasso import authorizeviews
+from yasso import resourceviews
+from yasso import tokenviews
 from yasso.models import AuthorizationServer
-from yasso.models import AuthorizeEndpoint
-from yasso.models import TokenEndpoint
 from yasso.policy import BearerAuthenticationPolicy
 from yasso.policy import ClientAuthenticationPolicy
 import re
 
 
 def make_root_factory(global_config, settings):
-    yasso_config = settings.get('yasso_config_file')
-    if yasso_config is None:
-        yasso_config = global_config['yasso_config_file']
-    root = AuthorizationServer(yasso_config)
+    root = AuthorizationServer(settings)
     return lambda request: root
 
 
 def authorize_app(global_config, root_factory=None, **settings):
     """User-visible authorization app.
-
-    This application authenticates the user (but not the client).
     """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
@@ -38,21 +30,13 @@ def authorize_app(global_config, root_factory=None, **settings):
         ),
         authorization_policy=ACLAuthorizationPolicy(),
     )
-    config.add_view(
-        AuthorizeView,
-        context=AuthorizeEndpoint,
-        permission='use_oauth',
-        renderer='templates/authorize.pt',
-    )
-    config.add_forbidden_view(basic_forbidden)
+    config.add_static_view('yasso-static', 'static', cache_max_age=3600)
+    config.scan(authorizeviews)
     return config.make_wsgi_app()
 
 
 def token_app(global_config, root_factory=None, **settings):
-    """Turn auth codes into access tokens.
-
-    This application authenticates the client (after the user
-    has authenticated).
+    """App for clients to turn auth codes into access tokens.
     """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
@@ -62,21 +46,12 @@ def token_app(global_config, root_factory=None, **settings):
         authentication_policy=ClientAuthenticationPolicy(root_factory),
         authorization_policy=ACLAuthorizationPolicy(),
     )
-    config.add_view(
-        token_view,
-        context=TokenEndpoint,
-        permission='get_token',
-        renderer='json',
-    )
-    config.add_forbidden_view(basic_forbidden)
+    config.scan(tokenviews)
     return config.make_wsgi_app()
 
 
 def resource_app(global_config, root_factory=None, **settings):
     """App for clients that have an access token.
-
-    This application authenticates both the user and the client
-    using a single access token.
     """
     if root_factory is None:
         root_factory = make_root_factory(global_config, settings)
@@ -86,22 +61,20 @@ def resource_app(global_config, root_factory=None, **settings):
         authentication_policy=BearerAuthenticationPolicy(root_factory),
         authorization_policy=ACLAuthorizationPolicy(),
     )
-    config.add_static_view('yasso-static', 'static', cache_max_age=3600)
-    config.add_forbidden_view(bearer_forbidden)
-    config.scan('yasso.views')
+    config.scan(resourceviews)
     return config.make_wsgi_app()
 
 
 class CompositeApp(object):
     """Combine the 3 apps into one.
 
-    /authorize -> authorize_app
+    /resource -> resource_app
     /token -> token_app
-    / -> resource_app
+    / -> authorize_app
     """
 
-    authorize_re = re.compile(r'^/?authorize(/|$)')
     token_re = re.compile(r'^/?token(/|$)')
+    resource_re = re.compile(r'^/?resource(/|$)')
 
     def __init__(self, global_config, **settings):
         self.root_factory = make_root_factory(global_config, settings)
@@ -114,10 +87,10 @@ class CompositeApp(object):
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
-        if self.authorize_re.match(path) is not None:
-            app = self.authorize_app
+        if self.resource_re.match(path) is not None:
+            app = self.resource_app
         elif self.token_re.match(path) is not None:
             app = self.token_app
         else:
-            app = self.resource_app
+            app = self.authorize_app
         return app(environ, start_response)

@@ -45,6 +45,6 @@ setup(
     authorize = yasso.main:authorize_app
     token = yasso.main:token_app
     resource = yasso.main:resource_app
-    composite = yasso.main:CompositeApp
+    main = yasso.main:CompositeApp
     """,
 )

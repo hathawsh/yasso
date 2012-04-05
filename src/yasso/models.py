@@ -12,57 +12,52 @@ import re
 class AuthorizationServer(object):
 
     __acl__ = (
-        (Allow, 'oauth.bearer', 'userinfo'),
         DENY_ALL,
     )
 
-    def __init__(self, config_file):
-        dirname = os.path.dirname(config_file)
-        self.cp = ConfigParser(defaults={
-            'here': dirname,
-            '__file__': config_file,
-        })
-        self.cp.read([config_file])
-
-        key_dir = os.path.abspath(self.cp.get('randenc', 'dir'))
-        freshness = int(self.get_option('randenc', 'freshness', 300))
-        max_age = int(self.get_option('randenc', 'max_age', 3600))
-        max_future = int(self.get_option('randenc', 'max_future', 300))
+    def __init__(self, settings):
+        key_dir = os.path.abspath(settings['randenc.dir'])
+        freshness = int(settings.get('randenc.freshness', 300))
+        max_age = int(settings.get('randenc.max_age', 3600))
+        max_future = int(settings.get('randenc.max_future', 300))
         randenc = RandomEncryption(key_dir,
             freshness=freshness, max_age=max_age, max_future=max_future)
         self.randenc = randenc
         self.encrypt = randenc.encrypt
         self.decrypt = randenc.decrypt
 
-        # Set up Clients from the config file.
-        self.clients = {}  # client_id: Client
-        prefix = 'client:'
-        for section in self.cp.sections():
-            if section.startswith(prefix):
-                client_id = self.get_option(section, 'id')
-                if not client_id:
-                    client_id = section[len(prefix):]
-                client = Client(
-                    client_id=client_id,
-                    secret=self.get_option(section, 'secret'),
-                    secret_sha256=self.get_option(section, 'secret_sha256'),
-                    redirect_uri_expr=self.get_option(
-                        section, 'redirect_uri_expr'),
-                    default_redirect_uri = self.get_option(
-                        section, 'default_redirect_uri'),
-                )
-                self.clients[client.client_id] = client
+        client_config_file = settings['client_config_file']
+        self.build_client_map(client_config_file)
 
         self.models = {
             'authorize': AuthorizeEndpoint(self, 'authorize'),
             'token': TokenEndpoint(self, 'token'),
+            'resource': ResourceEndpoint(self, 'resource'),
         }
 
-    def get_option(self, section, name, default=None):
-        if self.cp.has_option(section, name):
-            return self.cp.get(section, name)
-        else:
-            return default
+    def build_client_map(self, client_config_file):
+        cp = ConfigParser()
+        cp.read([client_config_file])
+        clients = {}  # client_id: Client
+
+        for section in cp.sections():
+
+            def get_option(name, default=None):
+                if cp.has_option(section, name):
+                    return cp.get(section, name)
+                else:
+                    return default
+
+            client = Client(
+                client_id=section,
+                secret=get_option('secret'),
+                secret_sha256=get_option('secret_sha256'),
+                redirect_uri_expr=get_option('redirect_uri_expr'),
+                default_redirect_uri=get_option('default_redirect_uri'),
+            )
+            clients[client.client_id] = client
+
+        self.clients = clients
 
     def __getitem__(self, name):
         return self.models[name]
@@ -96,7 +91,7 @@ class Client(object):
 class AuthorizeEndpoint(object):
 
     __acl__ = (
-        (Allow, Authenticated, 'use_oauth'),
+        (Allow, Authenticated, 'authorize'),
         DENY_ALL,
     )
 
@@ -108,7 +103,19 @@ class AuthorizeEndpoint(object):
 class TokenEndpoint(object):
 
     __acl__ = (
-        (Allow, 'oauth.client', 'get_token'),
+        (Allow, 'oauth.client', 'token'),
+        DENY_ALL,
+    )
+
+    def __init__(self, parent, name):
+        self.__parent__ = parent
+        self.__name__ = name
+
+
+class ResourceEndpoint(object):
+
+    __acl__ = (
+        (Allow, 'oauth.bearer', 'userinfo'),
         DENY_ALL,
     )
 

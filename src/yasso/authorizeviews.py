@@ -1,4 +1,6 @@
 
+"""Views for the authorize application."""
+
 from colander import Invalid
 from markupsafe import Markup
 from pyramid.encode import urlencode
@@ -8,11 +10,13 @@ from pyramid.httpexceptions import HTTPUnauthorized
 from pyramid.renderers import render_to_response
 from pyramid.security import authenticated_userid
 from pyramid.traversal import find_interface
-from randenc.enc import DecryptionError
+from pyramid.view import forbidden_view_config
+from pyramid.view import view_config
 from urlparse import parse_qsl
 from urlparse import urlsplit
 from urlparse import urlunsplit
 from yasso.models import AuthorizationServer
+from yasso.models import AuthorizeEndpoint
 import colander
 import time
 
@@ -47,7 +51,8 @@ class AuthorizeParameters(colander.MappingSchema):
     )
 
 
-# This view is registered in main.py.
+@view_config(context=AuthorizeEndpoint, permission='authorize',
+        renderer='templates/authorize.pt')
 class AuthorizeView(object):
 
     def __init__(self, context, request):
@@ -135,7 +140,7 @@ class AuthorizeView(object):
                 return
 
         expr = self.client.redirect_uri_expr
-        if expr is not None:
+        if expr:
             if expr.match(self.redirect_uri) is None:
                 raise ValueError(
                     "Mismatched redirect_uri: %s" % self.redirect_uri)
@@ -193,73 +198,7 @@ class AuthorizeView(object):
             return response
 
 
-class TokenEndpointError(Exception):
-    def __init__(self, error, description):
-        self.error = error
-        self.description = description
-
-
-# This view is registered in main.py.
-def token_view(context, request):
-    """Convert an OAuth authorization code to an access token."""
-    authz = find_interface(context, AuthorizationServer)
-    try:
-        try:
-            grant_type = request.POST['grant_type']
-            code = request.POST['code']
-            redirect_uri = request.POST.get('redirect_uri', '')
-        except KeyError, e:
-            raise TokenEndpointError('invalid_request', 'Required: %s' % e)
-
-        if grant_type != 'authorization_code':
-            raise TokenEndpointError('unsupported_grant_type',
-                "Only the 'authentication_code' grant_type is supported.")
-
-        client = authz.clients[authenticated_userid(request)]
-        try:
-            content = authz.decrypt(code)
-        except DecryptionError, e:
-            raise TokenEndpointError('invalid_grant', '%s' % e)
-        if content[0] != 'c':
-            raise TokenEndpointError('invalid_grant',
-                "The code provided is not an authorization code.")
-        (_, code_created, code_client_id, code_user_id,
-            code_redirect_uri) = content
-
-        if code_client_id != client.client_id:
-            raise TokenEndpointError('invalid_grant', "Mismatched client_id.")
-
-        age = time.time() - code_created
-        max_auth_code_age = int(request.registry.settings.get(
-            'max_auth_code_age', 600))
-        if age >= max_auth_code_age:
-            raise TokenEndpointError('invalid_grant',
-                "The authorization code has expired.")
-
-        if redirect_uri != code_redirect_uri:
-            raise TokenEndpointError('invalid_grant',
-                "Mismatched redirect_uri.")
-
-        now = int(time.time())
-        params = ['t', now, client.client_id, code_user_id]
-        token = authz.encrypt(params)
-        duration = authz.randenc.duration
-        return {
-            'access_token': token,
-            'token_type': 'bearer',
-            'expires_in': duration,
-            'scope': '',
-        }
-
-    except TokenEndpointError, e:
-        request.response.status = '400 Bad Request'
-        return {
-            'error': e.error,
-            'error_description': e.description,
-        }
-
-
-# This view is registered in main.py.
+@forbidden_view_config()
 def basic_forbidden(request):
     realm = request.registry.settings.get('realm', request.host)
     auth_header = 'Basic realm="{0}"'.format(realm)
@@ -270,26 +209,6 @@ def basic_forbidden(request):
         return HTTPUnauthorized(headers=headers)
 
 
-# This view is registered in main.py.
-def bearer_forbidden(request):
-    """A client failed to authenticate using an access token."""
-    if authenticated_userid(request) is not None:
-        # The currently authenticated user was forbidden access to something.
-        error = 'insufficient_scope'
-        klass = HTTPForbidden
-    elif (request.params.get('access_token')
-            or request.headers.get('Authorization')):
-        # Credentials were provided, but they were not valid.
-        error = 'invalid_token'
-        klass = HTTPUnauthorized
-    else:
-        # No token was provided.
-        error = None
-        klass = HTTPUnauthorized
-
-    realm = request.registry.settings.get('realm', request.host)
-    auth_header = 'Bearer realm="{0}"'.format(realm)
-    if error:
-        auth_header += ', error="{0}"'.format(error)
-    headers = {'WWW-Authenticate': auth_header}
-    return klass(headers=headers)
+@view_config(context=AuthorizationServer, renderer='string')
+def default_view(request):
+    return "This is a single sign-on server."
