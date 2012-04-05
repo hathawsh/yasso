@@ -7,6 +7,7 @@
 .coverage
 .externalToolBuilders
 develop-eggs
+dist
 eggs
 include
 lib

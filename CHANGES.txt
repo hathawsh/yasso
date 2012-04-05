@@ -1,4 +1,7 @@
-0.0
----
+Change Log
+==========
 
--  Initial version
+0.1 (2012-04-05)
+----------------
+
+- Initial release.
