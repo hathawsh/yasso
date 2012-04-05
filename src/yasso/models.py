@@ -30,9 +30,11 @@ class AuthorizationServer(object):
         max_future = int(self.get_option('randenc', 'max_future', 300))
         randenc = RandomEncryption(key_dir,
             freshness=freshness, max_age=max_age, max_future=max_future)
+        self.randenc = randenc
         self.encrypt = randenc.encrypt
         self.decrypt = randenc.decrypt
 
+        # Set up Clients from the config file.
         self.clients = {}  # client_id: Client
         prefix = 'client:'
         for section in self.cp.sections():

@@ -104,9 +104,13 @@ class AuthorizeView(object):
         if 'token' in self.response_types:
             # Implicit grant: generate and return an access token
             # in the fragment component.
-            fragment_data['access_token'] = self.make_token()
-            fragment_data['token_type'] = 'bearer'
-            fragment_data['scope'] = ''
+            duration = self.authz.randenc.duration
+            fragment_data.update({
+                'access_token': self.make_token(),
+                'token_type': 'bearer',
+                'expires_in': duration,
+                'scope': '',
+            })
         uri = self.expand_redirect_uri(query_data, fragment_data)
         return self.redirect_response(uri)
 
@@ -218,7 +222,7 @@ def token_view(context, request):
             raise TokenEndpointError('invalid_grant', '%s' % e)
         if content[0] != 'c':
             raise TokenEndpointError('invalid_grant',
-                "The given code is not an authorization code.")
+                "The code provided is not an authorization code.")
         (_, code_created, code_client_id, code_user_id,
             code_redirect_uri) = content
 
@@ -239,9 +243,11 @@ def token_view(context, request):
         now = int(time.time())
         params = ['t', now, client.client_id, code_user_id]
         token = authz.encrypt(params)
+        duration = authz.randenc.duration
         return {
             'access_token': token,
             'token_type': 'bearer',
+            'expires_in': duration,
             'scope': '',
         }
 
