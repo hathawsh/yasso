@@ -33,7 +33,7 @@ def token_view(context, request):
 
         if grant_type != 'authorization_code':
             raise TokenEndpointError('unsupported_grant_type',
-                "Only the 'authentication_code' grant_type is supported.")
+                "Only the 'authorization_code' grant_type is supported.")
 
         client = authz.clients[authenticated_userid(request)]
         try:
