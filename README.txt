@@ -1,7 +1,9 @@
 
 Yasso (Yet Another Single Sign-On) is a system for building a web-based
 single sign-on service using OAuth2.  It is intended to be compliant with
-draft 25 of the OAuth2 specification.
+draft 25 of the `OAuth2 specification`_.
+
+.. _`OAuth2 specification`: http://oauth.net/2/
 
 
 Getting Started
